@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import pyfire
 import logging
 import sys
@@ -18,9 +19,6 @@ class JBot(ClientXMPP):
         
         self.add_event_handler("session_start", self.start)
         self.add_event_handler("groupchat_message", self.xmpp_incoming)
-        self.add_event_handler("muc::%s::got_online" % self.room,
-                               self.muc_online)
-
         
     def start(self, event):
         self.get_roster()
@@ -31,7 +29,6 @@ class JBot(ClientXMPP):
                                         wait=True)
         
     def xmpp_incoming(self, msg):
-        print msg
         if msg['mucnick'] != self.nick and self.nick in msg['body']:
             self.to_campfire(msg)
             
@@ -54,7 +51,6 @@ class JBot(ClientXMPP):
             msg = "-- %s CHANGED TOPIC TO '%s'" % (username, message.body)
             
         if username!=CAMPFIRE_NICKNAME:
-            print 'No user, message: %s' % msg
             self.send_message(mto=JABBER_ROOM,
                               mbody=msg,
                               mtype='groupchat')
@@ -67,9 +63,9 @@ class JBot(ClientXMPP):
 
 
 
-def error(e):
+def error(e, room):
     print("Stream STOPPED due to ERROR: %s" % e)
-    sys.exit(2)
+    sys.exit(2) # useless - TODO: handle threads correctly
                     
 if __name__ == '__main__':
     # start campfire stream thread
@@ -84,7 +80,6 @@ if __name__ == '__main__':
     xmpp.register_plugin('xep_0030') # Service Discovery
     xmpp.register_plugin('xep_0045') # Multi-User Chat
     xmpp.register_plugin('xep_0199') # XMPP Ping
-    # add ('74.50.61.85', '5222') if connect doesn't work
     if xmpp.connect(JABBER_SERVER):
         xmpp.process(block=False)
         print "Jabber thread started"
