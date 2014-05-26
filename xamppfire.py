@@ -5,6 +5,7 @@ import sys
 from sleekxmpp import ClientXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
 from settings import *
+import threading
 
 logging.basicConfig(level=logging.ERROR)
 
@@ -31,6 +32,11 @@ class JBot(ClientXMPP):
     def xmpp_incoming(self, msg):
         if msg['mucnick'] != self.nick and self.nick in msg['body']:
             self.to_campfire(msg)
+        if 'die' in msg['body']:
+            self.leave()
+
+    def leave(self):
+        self.disconnect(wait=True)
             
     def from_campfire(self, message):
         username = ""
@@ -65,7 +71,7 @@ class JBot(ClientXMPP):
 
 def error(e, room):
     print("Stream STOPPED due to ERROR: %s" % e)
-    sys.exit(2) # useless - TODO: handle threads correctly
+    room.leave()
                     
 if __name__ == '__main__':
     # start campfire stream thread
@@ -73,6 +79,7 @@ if __name__ == '__main__':
     campfire_room = campfire.get_room_by_name(CAMPFIRE_ROOM)
     campfire_room.join()
     stream = campfire_room.get_stream(error_callback=error)
+    stream.daemon = True
     print "Campfire thread started"
 
     # start XMPP stream thread
@@ -81,11 +88,11 @@ if __name__ == '__main__':
     xmpp.register_plugin('xep_0045') # Multi-User Chat
     xmpp.register_plugin('xep_0199') # XMPP Ping
     if xmpp.connect(JABBER_SERVER):
-        xmpp.process(block=False)
-        print "Jabber thread started"
+        print "Jabber connected started"
+        # and attach the campfire stream thread to XMPP
+        stream.attach(xmpp.from_campfire).start()
+        xmpp.process(block=True)
     else: 
         print "Unable to connect"
         sys.exit(1)
         
-    # and attach the campfire stream thread to XMPP
-    stream.attach(xmpp.from_campfire).start()
