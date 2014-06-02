@@ -69,7 +69,7 @@ class JBot(ClientXMPP):
             msg = "-- %s CHANGED TOPIC TO '%s'" % (username, message.body)
             
         if message.user:
-            if message.user.email_address!=CAMPFIRE_USERNAME:
+            if message.user.email_address!=CAMPFIRE_EMAIL:
                 self.to_xmpp(msg)
 
     def to_xmpp(self, message):
@@ -97,6 +97,7 @@ class JBot(ClientXMPP):
         super(JBot, self).reconnect()
         self.campfire_room.leave()
         self.campfire_room.join()
+        self.campfire_room.speak('Back. Ready for any requests you may have.')
 
     def help_message(self):
         msg = "* Send a message to the Campfire room by preceding it with @%s\n" % JABBER_NICKNAME
@@ -113,6 +114,7 @@ if __name__ == '__main__':
     campfire = pyfire.Campfire(CAMPFIRE_ACCOUNT, CAMPFIRE_USERNAME, CAMPFIRE_PASSWORD, ssl=True)
     campfire_room = campfire.get_room_by_name(CAMPFIRE_ROOM)
     campfire_room.join()
+    campfire_room.speak('Back. Ready for any requests you may have.')
     stream = campfire_room.get_stream(error_callback=error)
     stream.daemon = True
     print "Campfire thread started"
