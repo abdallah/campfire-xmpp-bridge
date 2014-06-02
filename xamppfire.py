@@ -54,6 +54,7 @@ class JBot(ClientXMPP):
         msg = ""
         if message.user:
             username = message.user.name
+            # print message.user.get_data()
         
         if message.is_joining():
             msg = "--> %s ENTERS THE ROOM" % username
@@ -67,8 +68,9 @@ class JBot(ClientXMPP):
         elif message.is_topic_change():
             msg = "-- %s CHANGED TOPIC TO '%s'" % (username, message.body)
             
-        if username!=CAMPFIRE_NICKNAME:
-            self.to_xmpp(msg)
+        if message.user:
+            if message.user.email_address!=CAMPFIRE_USERNAME:
+                self.to_xmpp(msg)
 
     def to_xmpp(self, message):
         self.send_message(mto=JABBER_ROOM,
