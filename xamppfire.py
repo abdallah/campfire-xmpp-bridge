@@ -7,7 +7,7 @@ from sleekxmpp.exceptions import IqError, IqTimeout
 from settings import *
 import threading
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 
 
 class JBot(ClientXMPP):
@@ -29,9 +29,21 @@ class JBot(ClientXMPP):
                                         self.nick,
                                         wait=True)
         
+    def check_nick(self, msg):
+        nick_called = msg.split(' ', 1)[0][1:]
+        if nick_called.lower() in map(str.lower, BOT_NICKNAMES):
+            self.nick_called = nick_called
+        else:
+            self.nick_called = None
+        return self.nick_called
+        
     def xmpp_incoming(self, msg):
-        at_nick = '@%s' % self.nick
-        if msg['mucnick'] != self.nick and at_nick.upper() in msg['body'].upper():
+        logging.debug('mucnick: %s'%msg['mucnick'])
+        logging.debug('body: %s'%msg['body'])
+        logging.debug('nick_called: %s'%self.check_nick(msg['body']))
+        if msg['mucnick'] != self.nick \
+            and msg['body'][0] in BOT_PREFIX \
+            and self.check_nick(msg['body']):
             if '+die' in msg['body']:
                 self.leave()
             elif '+who' in msg['body']:
@@ -43,7 +55,7 @@ class JBot(ClientXMPP):
             elif '+help' in msg['body']:
                 self.help_message()
             else:
-                msg['body'] = msg['body'].replace(at_nick, '', 1)
+                msg['body'] = msg['body'][len(self.nick_called)+1:]
                 self.to_campfire(msg)
 
     def leave(self):
