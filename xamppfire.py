@@ -6,8 +6,10 @@ from sleekxmpp import ClientXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
 from settings import *
 import threading
+import prctl
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO, 
+                    format='(%(threadName)-10s) %(message)s')
 
 
 class JBot(ClientXMPP):
@@ -16,6 +18,7 @@ class JBot(ClientXMPP):
         ClientXMPP.__init__(self, jid, password)
         self.room = JABBER_ROOM
         self.nick = JABBER_NICKNAME
+        self.answer_to = JABBER_NICKNAMES
         self.campfire_room = campfire_room
         
         self.add_event_handler("session_start", self.start)
@@ -29,9 +32,16 @@ class JBot(ClientXMPP):
                                         self.nick,
                                         wait=True)
         
+    def nick_used(self, msg):
+        for nick in JABBER_NICKNAMES:
+            if msg.upper().startswith('@%s '%nick):
+                return nick
+        return False    
+
+
     def xmpp_incoming(self, msg):
-        at_nick = '@%s' % self.nick
-        if msg['mucnick'] != self.nick and at_nick.upper() in msg['body'].upper():
+        nick_used = self.get_used_nick(msg['body'])
+        if msg['mucnick'] != self.nick and nick_used:
             if '+die' in msg['body']:
                 self.leave()
             elif '+who' in msg['body']:
@@ -43,7 +53,7 @@ class JBot(ClientXMPP):
             elif '+help' in msg['body']:
                 self.help_message()
             else:
-                msg['body'] = msg['body'].replace(at_nick, '', 1)
+                msg['body'] = msg['body'][len(nick_used):]
                 self.to_campfire(msg)
 
     def leave(self):
@@ -54,7 +64,7 @@ class JBot(ClientXMPP):
         msg = ""
         if message.user:
             username = message.user.name
-            # print message.user.get_data()
+            logging.info("%s" % message.user.get_data())
         
         if message.is_joining():
             msg = "--> %s ENTERS THE ROOM" % username
@@ -106,10 +116,11 @@ class JBot(ClientXMPP):
         self.to_xmpp(msg)
 
 def error(e, room):
-    print("Stream STOPPED due to ERROR: %s" % e)
+    logging.debug("Stream STOPPED due to ERROR: %s" % e)
     room.leave()
                     
 if __name__ == '__main__':
+    prctl.set_proctitle('XamppFire')
     # start campfire stream thread
     campfire = pyfire.Campfire(CAMPFIRE_ACCOUNT, CAMPFIRE_USERNAME, CAMPFIRE_PASSWORD, ssl=True)
     campfire_room = campfire.get_room_by_name(CAMPFIRE_ROOM)
@@ -117,7 +128,7 @@ if __name__ == '__main__':
     campfire_room.speak('Back. Ready for any requests you may have.')
     stream = campfire_room.get_stream(error_callback=error)
     stream.daemon = True
-    print "Campfire thread started"
+    logging.info("%s" % "Campfire thread started")
 
     # start XMPP stream thread
     xmpp = JBot(JABBER_USERNAME, JABBER_PASSWORD, campfire_room)
@@ -125,11 +136,11 @@ if __name__ == '__main__':
     xmpp.register_plugin('xep_0045') # Multi-User Chat
     xmpp.register_plugin('xep_0199') # XMPP Ping
     if xmpp.connect(JABBER_SERVER):
-        print "Jabber connected started"
+        logging.info("%s" %  "Jabber connected started")
         # and attach the campfire stream thread to XMPP
         stream.attach(xmpp.from_campfire).start()
         xmpp.process(block=True)
     else: 
-        print "Unable to connect"
+        logging.error("%s" % "Unable to connect")
         sys.exit(1)
         
