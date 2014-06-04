@@ -7,7 +7,8 @@ from sleekxmpp.exceptions import IqError, IqTimeout
 from settings import *
 import threading
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR, 
+                    format='(%(threadName)-10s) %(message)s')
 
 
 class JBot(ClientXMPP):
@@ -16,6 +17,7 @@ class JBot(ClientXMPP):
         ClientXMPP.__init__(self, jid, password)
         self.room = JABBER_ROOM
         self.nick = JABBER_NICKNAME
+        self.answer_to = JABBER_NICKNAMES
         self.campfire_room = campfire_room
         
         self.add_event_handler("session_start", self.start)
@@ -66,7 +68,7 @@ class JBot(ClientXMPP):
         msg = ""
         if message.user:
             username = message.user.name
-            # print message.user.get_data()
+            logging.info("%s" % message.user.get_data())
         
         if message.is_joining():
             msg = "--> %s ENTERS THE ROOM" % username
@@ -118,7 +120,7 @@ class JBot(ClientXMPP):
         self.to_xmpp(msg)
 
 def error(e, room):
-    print("Stream STOPPED due to ERROR: %s" % e)
+    logging.debug("Stream STOPPED due to ERROR: %s" % e)
     room.leave()
                     
 if __name__ == '__main__':
@@ -129,7 +131,7 @@ if __name__ == '__main__':
     campfire_room.speak('Back. Ready for any requests you may have.')
     stream = campfire_room.get_stream(error_callback=error)
     stream.daemon = True
-    print "Campfire thread started"
+    logging.info("%s" % "Campfire thread started")
 
     # start XMPP stream thread
     xmpp = JBot(JABBER_USERNAME, JABBER_PASSWORD, campfire_room)
@@ -137,11 +139,11 @@ if __name__ == '__main__':
     xmpp.register_plugin('xep_0045') # Multi-User Chat
     xmpp.register_plugin('xep_0199') # XMPP Ping
     if xmpp.connect(JABBER_SERVER):
-        print "Jabber connected started"
+        logging.info("%s" %  "Jabber connected started")
         # and attach the campfire stream thread to XMPP
         stream.attach(xmpp.from_campfire).start()
         xmpp.process(block=True)
     else: 
-        print "Unable to connect"
+        logging.error("%s" % "Unable to connect")
         sys.exit(1)
         
