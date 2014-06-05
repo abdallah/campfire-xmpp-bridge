@@ -1,11 +1,13 @@
 #!/usr/bin/python
 import pyfire
+from pyfire.connection import ConnectionError
 import logging
-import sys
+import os
+import signal
+import psutil
 from sleekxmpp import ClientXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
 from settings import *
-import threading
 
 logging.basicConfig(level=logging.ERROR, 
                     format='(%(threadName)-10s) %(message)s')
@@ -17,7 +19,7 @@ class JBot(ClientXMPP):
         ClientXMPP.__init__(self, jid, password)
         self.room = JABBER_ROOM
         self.nick = JABBER_NICKNAME
-        self.answer_to = JABBER_NICKNAMES
+        self.answer_to = BOT_NICKNAMES
         self.campfire_room = campfire_room
         
         self.add_event_handler("session_start", self.start)
@@ -33,7 +35,7 @@ class JBot(ClientXMPP):
         
     def check_nick(self, msg):
         nick_called = msg.split(' ', 1)[0][1:]
-        if nick_called.lower() in map(str.lower, BOT_NICKNAMES):
+        if nick_called.lower() in map(str.lower, self.answer_to):
             self.nick_called = nick_called
         else:
             self.nick_called = None
@@ -119,19 +121,23 @@ class JBot(ClientXMPP):
         msg += "* @%s +recent to list recent messages from the Campfire room\n" % JABBER_NICKNAME
         self.to_xmpp(msg)
 
-def error(e, room):
+def campfire_error(e, room):
     logging.debug("Stream STOPPED due to ERROR: %s" % e)
     room.leave()
-                    
-if __name__ == '__main__':
+
+def start_streams():
     # start campfire stream thread
-    campfire = pyfire.Campfire(CAMPFIRE_ACCOUNT, CAMPFIRE_USERNAME, CAMPFIRE_PASSWORD, ssl=True)
-    campfire_room = campfire.get_room_by_name(CAMPFIRE_ROOM)
-    campfire_room.join()
-    campfire_room.speak('Back. Ready for any requests you may have.')
-    stream = campfire_room.get_stream(error_callback=error)
-    stream.daemon = True
-    logging.info("%s" % "Campfire thread started")
+    try:
+        campfire = pyfire.Campfire(CAMPFIRE_ACCOUNT, CAMPFIRE_USERNAME, CAMPFIRE_PASSWORD, ssl=True)
+        campfire_room = campfire.get_room_by_name(CAMPFIRE_ROOM)
+        campfire_room.join()
+        campfire_room.speak('Back. Ready for any requests you may have.')
+        stream = campfire_room.get_stream(error_callback=campfire_error)
+        stream.daemon = True
+        logging.info("%s" % "Campfire thread started")
+    except ConnectionError, error: 
+        logging.error("%s" % "Unable to connect to Campfire")
+        os._exit(2)
 
     # start XMPP stream thread
     xmpp = JBot(JABBER_USERNAME, JABBER_PASSWORD, campfire_room)
@@ -145,5 +151,32 @@ if __name__ == '__main__':
         xmpp.process(block=True)
     else: 
         logging.error("%s" % "Unable to connect")
-        sys.exit(1)
+        os._exit(2)
         
+def stop_all(signum, frame):
+    logging.info('Killing of processes')
+    parent = psutil.Process()
+    children = parent.get_children(recursive=True)
+    for cpid in children:
+        cpid.send_signal(signal.SIGKILL)
+        logging.info('Sent SIGKILL to %d'%cpid.pid)
+    logging.info('Shutting down...')
+    os._exit(0)
+             
+def create_daemon():
+    try:
+        pid = os.fork()
+        if pid > 0:
+            logging.info('PID: %d'%pid)
+            os._exit(0)
+    except OSError, error:
+       logging.error('Unable to fork. Error: %d (%s)'%(error.errno, error.strerror)) 
+       os._exit(1)  
+    
+    signal.signal(signal.SIGTERM, stop_all)
+    start_streams()
+
+
+        
+if __name__ == '__main__':
+    create_daemon()
